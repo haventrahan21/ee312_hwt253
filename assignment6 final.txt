@@ -1,0 +1,151 @@
+#include <stdlib.h> 
+#include <stdio.h>
+
+#define HI(index) /*cmp =*/ heap[(index)]+ 256*heap[(index)-1];
+char * store(int nw, int index, char heap[], int cmp);
+//Initialize the starting point of the array 
+void init_heap(char heap[]) {
+	heap[9999] = 0xC0;
+	heap[9998] = 0x09;
+	heap[3] = 0xC0;
+	heap[2] = 0x09;
+}
+//Allocate requested memory 
+char *my_malloc(char heap[], int numbytes) {
+	int freeW=0;
+	int cmp;
+	int hold;
+	int oldMD;
+	int index = 9999;
+	char *p;
+	//char test;
+	printf("My malloc called\n");
+	int numwords = numbytes / 4;
+	if (numbytes % 4) { numwords++; }
+	while (index > 0) {
+		//if (heap[index] < 0) {
+		//if(HI(index)<0){
+		//check to convert 
+		
+		if (  (heap[index-1] != 0) &&  (heap[index] & 0x80) == 0x80) {
+			cmp = (heap[index] ^ 0xFF) + 1; //change sign
+			oldMD = -cmp;
+			oldMD += 256 * heap[index - 1];
+		}
+		else { oldMD = heap[index]; }
+		
+		if (oldMD <0) {
+			index = index + (4*(oldMD-4)); 
+		}
+
+		
+
+		if (oldMD > 0) {
+			hold = index;
+			while (oldMD > 0) {
+				freeW += (oldMD+4);
+				if ((numwords + 4) < freeW) {
+					p = store(numwords, hold, heap, oldMD);
+					return p;
+				}
+				else index -= (4 * (4+heap[index]));
+				if ((heap[index - 1] > 0) && (heap[index] & 0x80) == 0x80) {
+					cmp = (heap[index] ^ 0xFF) + 1; //change sign
+					oldMD = -cmp;
+					oldMD += 256 * heap[index - 1];
+				}
+				else if (heap[index] == 0) { while (heap[index] == 0) { index -= 4; freeW++; } }
+					else oldMD = heap[index];
+			}
+		}
+
+	}
+	printf("Sorry nothing is available!\n");
+	return NULL;
+}
+//Deallocate requested memory 
+void my_free(char slab[], char *p) {
+	char in;
+	//int i;
+	int cnt;
+	int hold;
+	cnt = *p;
+	
+
+	if (-128 < *p) {
+		*p = -*p;
+		hold = *p;
+		cnt = *p + 2;
+		p = p - (4 * cnt);
+		*p = hold;
+	}
+	else {
+		hold = (*p ^ 0xFF) + 1;
+		hold = -hold;
+		p--;
+		hold += 256 * *p;
+		p++;
+		*p = hold; //should truncate
+		*(p + 1) = hold / 256;
+		cnt = (hold + 2) * 4;
+		p = p - cnt;
+		*p = hold;
+		*(p + 1) = hold / 256;
+	}
+	p = 0; // nullify pointer
+
+}
+
+char * store(int nw, int index, char heap[], int newMD) {
+	char * p;
+	int cnt=0;
+	int hold;
+	p = &heap[index]; //stores the location in p, make p* the metadata value
+	
+	heap[index] = -nw;
+	if (nw < 128) heap[index - 1] = 0;
+	index -= 4 * (nw + 2);
+	heap[index] = -nw;
+	if (nw < 128) heap[index - 1] = 0;
+	///////
+	//fix metadata
+	newMD -= (nw + 4);
+	index -= 8;
+	hold = index;
+	while (((heap[index] > -1) || ((heap[index - 1] > -1) && (heap[index] > -1)) ) && (index > 0) ) {
+		cnt++;
+		index -= 4;
+
+	}
+	index += 4;
+	cnt -= 4;
+	if (cnt < 1) { 
+		while (cnt < 4) {
+			heap[index] = 0; 
+			cnt++; 
+			index += 4; } }
+
+	else if (cnt < 127) {
+		heap[hold] = cnt;
+		heap[index] = cnt;
+	}
+	else {
+		heap[hold] = cnt;
+		heap[hold - 1] = cnt / 256;
+		heap[index] = cnt;
+		heap[index - 1] = cnt / 256;
+	}
+	/*heap[index] = newMD; //store least significant 8 bits in heap[index] by truncating automatically
+	if (newMD > 127) {
+		heap[index - 1] = newMD / 256;
+	}
+	index -= (4 * (newMD+2));
+	heap[index] = newMD; //store least significant 8 bits in heap[index] by truncating automatically
+	if (newMD > 127) {
+		heap[index - 1] = newMD / 256;
+	}*/
+	/////
+	return p;
+}
+
+//fix metadata
